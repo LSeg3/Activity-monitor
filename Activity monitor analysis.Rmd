@@ -1,0 +1,603 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Loading the libraries
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(lubridate)
+library(survival)
+library(ggplot2)
+library(forcats)
+library(survminer)
+library(emmeans)
+library(googlesheets4)
+library(forcats)
+library(scales)
+library(grid)
+library(ggpubr)
+```
+
+# Reading the data
+```{r}
+m1<-read.csv("Monitor1.csv")
+m2<-read.csv("Monitor2.csv")
+
+m1<-m1 %>%
+  mutate(datetime=paste(Date, Time)) %>%
+  select(-c(A:F)) %>%
+  pivot_longer(
+    cols=M1.1:M1.32, 
+    names_to = "tube",
+    values_to = "act"
+  )
+
+m2<-m2 %>%
+  mutate(datetime=paste(Date, Time)) %>%
+  select(-c(A:F)) %>%
+  pivot_longer(
+    cols=M2.1:M2.32, 
+    names_to = "tube",
+    values_to = "act"
+  )
+
+data<-bind_rows(m1,m2)
+
+data <-data %>%
+  mutate(date=dmy(Date),
+         time=hms(Time),
+          stage=case_when(
+            tube=="M1.1"~"Female",
+            tube=="M1.2"~"Male",
+            tube=="M1.3"~"LJ",
+            tube=="M1.4"~"MJ",
+            tube=="M1.5"~"Female",
+            tube=="M1.6"~"Group",
+            tube=="M1.7"~"SJ",
+            tube=="M1.8"~"Empty",
+            tube=="M1.9"~"SJ",
+            tube=="M1.10"~"Female",
+            tube=="M1.11"~"LJ",
+            tube=="M1.12"~"Male",
+            tube=="M1.13"~"MJ",
+            tube=="M1.14"~"Female",
+            tube=="M1.15"~"Male",
+            tube=="M1.16"~"SJ",
+            tube=="M1.17"~"LJ",
+            tube=="M1.18"~"Group",
+            tube=="M1.19"~"Female",
+            tube=="M1.20"~"SJ",
+            tube=="M1.21"~"Male",
+            tube=="M1.22"~"MJ",
+            tube=="M1.23"~"LJ",
+            tube=="M1.24"~"Male",
+            tube=="M1.25"~"Empty",
+            tube=="M1.26"~"MJ",
+            tube=="M1.27"~"Group",
+            tube=="M1.28"~"Female",
+            tube=="M1.29"~"SJ",
+            tube=="M1.30"~"Male",
+            tube=="M1.31"~"MJ",
+            tube=="M1.32"~"LJ",
+            tube=="M2.1"~"Male",
+            tube=="M2.2"~"LJ",
+            tube=="M2.3"~"SJ",
+            tube=="M2.4"~"Female",
+            tube=="M2.5"~"MJ",
+            tube=="M2.6"~"SJ",
+            tube=="M2.7"~"LJ",
+            tube=="M2.8"~"Male",
+            tube=="M2.9"~"Female",
+            tube=="M2.10"~"SJ",
+            tube=="M2.11"~"Empty",
+            tube=="M2.12"~"MJ",
+            tube=="M2.13"~"Male",
+            tube=="M2.14"~"LJ",
+            tube=="M2.15"~"Group",
+            tube=="M2.16"~"MJ",
+            tube=="M2.17"~"SJ",
+            tube=="M2.18"~"Female",
+            tube=="M2.19"~"MJ",
+            tube=="M2.20"~"Group",
+            tube=="M2.21"~"LJ",
+            tube=="M2.22"~"Male",
+            tube=="M2.23"~"Female",
+            tube=="M2.24"~"Empty",
+            tube=="M2.25"~"SJ",
+            tube=="M2.26"~"LJ",
+            tube=="M2.27"~"Female",
+            tube=="M2.28"~"Male",
+            tube=="M2.29"~"Group",
+            tube=="M2.30"~"MJ",
+            tube=="M2.31"~"Male",
+            tube=="M2.32"~"Female",
+            TRUE~NA
+          )        ) 
+data <- data%>%
+  filter(date>"2025-05-17") %>%
+  filter(date<"2025-05-23") %>%
+  filter(stage!="Empty")
+
+data$datetime2<-ymd_hms(paste(data$date, data$Time))
+data$hour<-format(round_date(as.POSIXct(data$datetime2), unit="1 hour"), "%H")
+data <-data %>%
+mutate(hour=case_when(hour=="00"~"0",
+                       hour=="01"~"1", 
+                       hour=="02"~"2", 
+                       hour=="03"~"3", 
+                       hour=="04"~"4", 
+                       hour=="05"~"5", 
+                       hour=="06"~"6", 
+                       hour=="07"~"7", 
+                       hour=="08"~"8",  
+                       hour=="09"~"9",
+                       TRUE~hour))
+
+data$hour<-factor(data$hour, levels=c("0", "1", "2","3", "4", "5", "6", "7", "8", "9", "10","11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"))
+str(data)
+
+#data$time2<-format(as.POSIXct(data$Time), format="%H:%M:%S")
+
+```
+
+# Raw data
+```{r}
+# Females
+data %>% filter(stage=="Female") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+# Males
+data %>% filter(stage=="Male") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+# Large juveniles
+data %>% filter(stage=="LJ") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+# Medium juveniles
+data %>% filter(stage=="MJ") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+# Small juveniles
+data %>% filter(stage=="SJ") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+# Groups
+data %>% filter(stage=="Group") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+# Female tube 1.1
+data %>% filter(tube=="M1.1") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),,
+                   date_minor_breaks = "2 hours")
+
+data %>% filter(tube=="M1.18") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-05-18 12:00:00", "2025-05-19 12:00:00", "2025-05-20 12:00:00",  "2025-05-21 12:00:00", "2025-05-22 12:00:00",  "2025-05-23 12:00:00")),
+                   date_minor_breaks = "2 hours")
+
+
+```
+
+
+
+
+# Hourly sum and average
+```{r}
+hours<-data%>%
+  group_by(tube, stage)%>%
+  summarize(sum=sum(act),
+            mean=mean(act)
+)
+rem2<-hours %>% filter(sum>0)
+rem<-as.data.frame(rem2$tube)
+colnames(rem) <- "tube"
+data2<-left_join(rem, data, by="tube")
+
+hours2<-data2%>%
+  group_by(hour, tube, stage)%>%
+  summarize(sum=sum(act),
+            mean=mean(act)
+)
+
+
+hours3<-data2%>%
+  group_by(hour)%>%
+  summarize(sum=sum(act),
+            mean=mean(act)
+)
+```
+
+# All data
+```{r}
+all<-ggplot(hours3, aes(x=as.numeric(hour),y=sum)) +
+  geom_bar(stat="identity") +
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 16) + 
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, by = 2)) +
+  #ggtitle("All data")+ 
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+all
+ggsave("All_all.png",plot = last_plot(),width=8, height=8, units="in",bg = "white" )
+
+ggsave("activity.png", plot = last_plot(), width=6, heigh=4, units="in")
+```
+# Just groups
+```{r}
+gdata<-hours2 %>%
+  filter(stage=="Group")
+
+groups<-ggplot(gdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity")+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 14) +
+  #ggtitle("Groups")+ 
+  theme(axis.text.x=element_text(angle=90, hjust=1))
+groups
+ggsave("All_groups.png",plot = last_plot(),width=8, height=8, units="in",bg = "white" )
+
+ggplot(gdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity") + facet_wrap(~tube)+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 16) 
+```
+# Just female
+```{r}
+fdata<-hours2 %>%
+  filter(stage=="Female")
+
+females<-ggplot(fdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity")+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 14)  +
+  ggtitle("Females")+ theme(axis.text.x=element_text(angle=90, hjust=1))
+females
+
+ggplot(fdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity") + facet_wrap(~tube)+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 16) 
+```
+# Just males
+```{r}
+mdata<-hours2 %>%
+  filter(stage=="Male")
+
+males<-ggplot(mdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity")+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 14)  +
+  ggtitle("Males")+ theme(axis.text.x=element_text(angle=90, hjust=1))
+males
+
+ggplot(mdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity") + facet_wrap(~tube)+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 16) 
+```
+# Just large juveniles
+```{r}
+ldata<-hours2 %>%
+  filter(stage=="LJ")
+
+ljuvs<-ggplot(ldata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity")+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 14)  +
+  ggtitle("Large juveniles")+ theme(axis.text.x=element_text(angle=90, hjust=1))
+ljuvs
+
+ggplot(ldata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity") + facet_wrap(~tube)+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 16) 
+```
+
+# Just medium juveniles
+```{r}
+
+mjdata<-hours2 %>%
+  filter(stage=="MJ")
+
+mjuvs<-ggplot(mjdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity")+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 14)  +
+  ggtitle("Medium juveniles") + theme(axis.text.x=element_text(angle=90, hjust=1))
+mjuvs
+
+ggplot(mjdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity") + facet_wrap(~tube)+
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 16) 
+```
+
+## Combining plots
+```{r}
+stages<-ggarrange(mjuvs+rremove("ylab")+rremove("xlab"), ljuvs+rremove("ylab")+rremove("xlab"), males+rremove("ylab")+rremove("xlab"), females+rremove("ylab")+rremove("xlab"), nrow=4)
+stages
+annotate_figure(stages, left=textGrob("Activity", rot=90, vjust=0.35, gp=gpar(cex = 1.5)), bottom=textGrob("Hour", vjust=0.35, gp=gpar(cex = 1.5)))
+ggsave("All_stages.png",plot = last_plot(),width=5, height=8, units="in",bg = "white" )
+
+grstages<-ggarrange(mjuvs+rremove("ylab")+rremove("xlab"), ljuvs+rremove("ylab")+rremove("xlab"), males+rremove("ylab")+rremove("xlab"), females+rremove("ylab")+rremove("xlab"), groups+ggtitle("Groups")+rremove("ylab")+rremove("xlab"), nrow=5)
+grstages
+annotate_figure(grstages, left=textGrob("Activity", rot=90, vjust=0.35, gp=gpar(cex = 1.5)), bottom=textGrob("Hour", vjust=0.35, gp=gpar(cex = 1.5)))
+ggsave("All_stagesand group.png",plot = last_plot(),width=5, height=8, units="in",bg = "white" )
+
+```
+
+
+
+
+
+
+
+
+
+# Activity monitor and temperature
+
+# Reading the data
+```{r}
+# Activity data
+m1h<-read.csv("Monitor1heat.csv")
+
+
+m1h<-m1h %>%
+  mutate(datetime=paste(Date, Time)) %>%
+  select(c(1:3,10, 16, 19,23, 30, 34, 37)) %>%
+  pivot_longer(
+    cols=M1.6:M1.27, 
+    names_to = "tube",
+    values_to = "act"
+  )
+
+
+data2 <-m1h %>%
+  mutate(date=dmy(Date),
+         time=hms(Time),
+          stage=case_when(
+            tube=="M1.6"~"Empty",
+            tube=="M1.9"~"Empty",
+            tube=="M1.13"~"Group",
+            tube=="M1.20"~"Empty",
+            tube=="M1.24"~"Group",
+            tube=="M1.27"~"Group",
+            TRUE~NA
+          )        ) 
+data2 <- data2%>%
+  filter(date>"2025-06-15") %>%
+  filter(date<"2025-06-20") 
+
+data2$datetime2<-ymd_hms(paste(data2$date, data2$Time))
+data2$hour<-format(round_date(as.POSIXct(data2$datetime2), unit="1 hour"), "%H")
+str(data2)
+
+#data$time2<-format(as.POSIXct(data$Time), format="%H:%M:%S")
+
+
+#Temperature data
+temps<-read.csv("Temps.csv")
+
+
+temps<-temps %>%
+  mutate(datetime=paste(Date, Time)) %>%
+  #select(c(1:3,10, 16, 19,23, 30, 34, 37)) %>%
+  pivot_longer(
+    cols=1:6, 
+    names_to = "tube",
+    values_to = "temp"
+  )
+
+
+temps <-temps %>%
+  mutate(date=mdy(Date),
+         time=hms(Time),
+          stage=case_when(
+            tube=="Temp.T6"~"Empty",
+            tube=="Temp.T9"~"Empty",
+            tube=="Temp.T13"~"Group",
+            tube=="Temp.T20"~"Empty",
+            tube=="Temp.T24"~"Group",
+            tube=="Temp.T27"~"Group",
+            TRUE~NA
+          )        ) 
+
+
+
+temps$datetime2<-ymd_hms(paste(temps$date, temps$Time))
+temps$hour<-format(round_date(as.POSIXct(temps$datetime2), unit="1 hour"), "%H")
+str(temps)
+
+
+```
+
+
+# Raw data
+```{r}
+# Groups
+data2 %>% filter(stage=="Group") %>%
+  ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-06-16 12:00:00", "2025-06-17 12:00:00", "2025-06-18 12:00:00",  "2025-06-19 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+# All tubes
+
+data2 %>%   ggplot(aes(x=datetime2,y=act)) +
+  geom_line()+ facet_wrap(~tube, scales="free") +
+  scale_x_datetime(breaks = as_datetime(c("2025-06-16 12:00:00", "2025-06-17 12:00:00", "2025-06-18 12:00:00",  "2025-06-19 12:00:00")),
+                   date_minor_breaks = "6 hours")
+
+```
+
+# Hourly sum and average
+```{r}
+hours<-data2%>%
+  group_by(tube, stage)%>%
+  summarize(sum=sum(act),
+            mean=mean(act)
+)
+rem2<-hours %>% filter(sum>0)
+rem<-as.data.frame(rem2$tube)
+colnames(rem) <- "tube"
+data2b<-left_join(rem, data2, by="tube")
+
+hours2<-data2b%>%
+  group_by(hour, tube, stage)%>%
+  summarize(sum=sum(act),
+            mean=mean(act)
+)
+
+
+hours3<-data2b%>%
+  group_by(hour)%>%
+  summarize(sum=sum(act),
+            mean=mean(act)
+)
+
+
+```
+
+
+# All data
+```{r}
+gact<-ggplot(hours3, aes(x=as.numeric(hour),y=sum)) +
+  geom_bar(stat="identity") +
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 16) + 
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, by = 2))+
+annotate(geom = "rect", xmin = 13, xmax = 16, ymin = 0, ymax = 266,
+           fill = "red",  alpha = 0.2) 
+gact
+
+ggsave("activityheat.png", plot = last_plot(), width=6, heigh=4, units="in")
+```
+
+# Just groups
+```{r}
+gdata<-hours2 %>%
+  filter(stage=="Group")
+
+ggplot(gdata, aes(x=hour,y=sum)) +
+  geom_bar(stat="identity")
+
+act.group<-ggplot(gdata, aes(x=as.numeric(hour),y=sum)) +
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, by = 3))+
+   geom_bar(stat="identity") + facet_wrap(~tube)+
+ annotate(geom = "rect", xmin = 13, xmax = 16, ymin = 0, ymax = 173,
+           fill = "red",  alpha = 0.2)  +
+  xlab("Hour") +
+  ylab("Activity")+
+  theme_classic(base_size = 13) 
+
+
+act.group
+```
+
+
+# Hourly sum and average temp
+```{r}
+hours2<-temps%>%
+  group_by(hour, tube, stage)%>%
+  summarize(mean=mean(temp)
+)
+
+
+hours3<-temps%>%
+  group_by(hour)%>%
+  summarize(mean=mean(temp)
+)
+
+
+```
+
+
+# All data
+```{r}
+gtemp<-ggplot(hours3, aes(x=as.numeric(hour),y=mean)) +
+  geom_line(stat="identity") +
+  xlab("Hour") +
+  ylab("Temperature (Celsius)")+
+  theme_classic(base_size = 16) + 
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, by = 2))+
+ annotate(geom = "rect", xmin = 13, xmax = 16, ymin = 26, ymax = 28.25,
+           fill = "red",  alpha = 0.2) 
+gtemp
+
+ggsave("activitytemp.png", plot = last_plot(), width=6, heigh=4, units="in")
+
+ggarrange(gact, gtemp, ncol=1, nrow=2)
+ggsave("activitytempall.png", plot = last_plot(), width=6, heigh=4, units="in")
+
+```
+
+# Just groups
+```{r}
+gdata<-hours2 %>%
+  filter(stage=="Group")
+
+ggplot(gdata, aes(x=as.numeric(hour),y=mean)) +
+  geom_line()
+
+temp.group<-ggplot(gdata, aes(x=as.numeric(hour),y=mean)) +
+  geom_line() + facet_wrap(~tube) +
+  scale_y_continuous(limits = c(26, 28.5), breaks = seq(26, 28.5, by = 0.25))
+
+
+temp.group<-ggplot(gdata, aes(x=as.numeric(hour),y=mean, group=tube)) +
+ geom_line() + facet_wrap(~tube)+
+   scale_x_continuous(limits = c(0, 24), breaks = seq(0, 23, by = 3))+
+   scale_y_continuous(limits = c(26, 28.5), breaks = seq(26, 28.5, by = 0.25)) +
+ annotate(geom = "rect", xmin = 13, xmax = 16, ymin = 26, ymax = 28.5,
+           fill = "red",  alpha = 0.2)  +
+  xlab("Hour") +
+  ylab("Temperature(Celsius)")+
+  theme_classic(base_size = 12) 
+
+
+temp.group
+
+ggarrange(act.group, temp.group, ncol=1, nrow=2)
+
+ggsave("activitytempgroups.png", plot = last_plot(), width=6, heigh=6, units="in")
+```
+
+
